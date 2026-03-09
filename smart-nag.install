@@ -9,7 +9,7 @@ set -euo pipefail
 
 VERSION="1.0.0"
 APPNAME="smart-nag"
-BASE_URL="https://raw.githubusercontent.com/linuxcaffe/tw-smart-nag-hook/main"
+BASE_URL="https://raw.githubusercontent.com/linuxcaffe/tw-smart-nag-hook/master"
 
 # Colors
 RED='\033[0;31m'
