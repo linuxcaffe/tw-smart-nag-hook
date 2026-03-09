@@ -1,0 +1,42 @@
+# smart-nag.rc — configuration for tw-smart-nag-hook
+#
+# Include in ~/.taskrc:
+#   include ~/.task/config/smart-nag.rc
+#      ONLY if inclusion to sanity-check is desired
+
+condition.nag-started.description = Started tasks 
+condition.nag-started.filter      = +PENDING +ACTIVE
+condition.nag-started.msg         = <description> is active! Still working on it?
+condition.nag-started.sort        = urgency-
+condition.nag-started.action      = edit|mod, Stop <description>|stop
+condition.nag-started.type        = nag
+
+condition.nag-due-today.description = Due today! 
+condition.nag-due-today.filter      = +PENDING due:today
+condition.nag-due-today.msg         = <description> is due TODAY!
+condition.nag-due-today.sort        = due+,urgency-
+condition.nag-due-today.action      = edit|mod due:, clear due:date|mod due:
+condition.nag-due-today.type        = nag
+
+condition.nag-sched-today.description = Scheduled for today! 
+condition.nag-sched-today.filter      = +PENDING scheduled:today
+condition.nag-sched-today.msg         = <description> is scheduled for TODAY!
+condition.nag-sched-today.sort        = scheduled+,urgency-
+condition.nag-sched-today.action      = edit|mod sched:, clear sched:date|mod scheduled:
+condition.nag-sched-today.type        = nag
+
+
+
+#condition.nag-sched-today
+
+
+
+#condition.nag-overdue.filter=+PENDING due.before:today
+#condition.overdue.msg=<description> is overdue! task(s)
+
+#condition.next.filter=+PENDING +next
+#condition.next.msg={count} +next task(s) waiting
+
+#condition.hot.filter=+PENDING priority:H
+#condition.hot.msg={count} high-priority task(s) still open
+#condition.hot.on=done,stop,launch
