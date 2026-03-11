@@ -121,7 +121,8 @@ def main():
             break
 
     subprocess.run(
-        ['task', 'rc.hooks=off', 'rc.verbose=nothing', 'config', 'rc.nag', message],
+        ['task', 'rc.hooks=off', 'rc.confirmation=off', 'rc.verbose=nothing',
+         'config', 'nag', message],
         capture_output=True
     )
     sys.exit(0)
