@@ -4,6 +4,23 @@
 #   include ~/.task/config/smart-nag.rc
 #      ONLY if inclusion to sanity-check is desired
 
+# ── Timer popup (smart-nag-popup.py + systemd timer) ─────────────────────────
+
+# Master switch for timer-driven popups (on|off)
+nag.popup         = on
+
+# Seconds before the notification auto-dismisses
+nag.popup-timeout = 8
+
+# Minutes to suppress after clicking Snooze
+nag.popup-snooze  = 30
+
+# Rich YAD dialog with Open tasks / Snooze / Dismiss buttons
+# Requires: yad, gtk-task.sh (tw-gtk package)
+nag.popup-gtk     = on
+
+# ── Conditions ────────────────────────────────────────────────────────────────
+
 condition.nag-started.description = Started tasks 
 condition.nag-started.filter      = +PENDING +ACTIVE
 condition.nag-started.msg         = task <id> "<description>" is active! Still working on it?

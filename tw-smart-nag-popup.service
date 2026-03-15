@@ -1,0 +1,17 @@
+[Unit]
+Description=Taskwarrior Smart Nag Popup
+# Requires a graphical session — won't fire on headless logins
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.task/scripts/smart-nag-popup.py
+# GUI tools (notify-send, yad) need DISPLAY and the session bus.
+# Modern display managers export these automatically via
+#   systemctl --user import-environment DISPLAY DBUS_SESSION_BUS_ADDRESS
+# If popups don't appear, run that command in your session startup.
+Environment=DISPLAY=:0
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
+StandardOutput=journal
+StandardError=journal

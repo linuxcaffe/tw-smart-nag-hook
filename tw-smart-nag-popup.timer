@@ -1,0 +1,11 @@
+[Unit]
+Description=Taskwarrior Smart Nag Popup Timer
+
+[Timer]
+# First popup 2 minutes after login
+OnActiveSec=2min
+# Then every 30 minutes — edit this line to change the interval
+OnUnitActiveSec=30min
+
+[Install]
+WantedBy=timers.target
