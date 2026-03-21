@@ -120,9 +120,10 @@ def main():
         if message:
             break
 
+    nag_text = f'[nag] {message}' if message else message
     subprocess.run(
         ['task', 'rc.hooks=off', 'rc.confirmation=off', 'rc.verbose=nothing',
-         'config', 'nag', message],
+         'config', 'nag', nag_text],
         capture_output=True
     )
     sys.exit(0)
