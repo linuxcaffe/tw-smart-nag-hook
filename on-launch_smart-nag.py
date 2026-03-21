@@ -33,9 +33,8 @@ Install:
 
 import os
 import sys
+import time
 from pathlib import Path
-from datetime import datetime
-import subprocess
 
 # Debug configuration (default 0, triggered by tw --debug=2)
 DEBUG_MODE = 0
@@ -58,6 +57,7 @@ def get_log_dir():
     return log_dir
 
 if debug_active:
+    from datetime import datetime
     DEBUG_LOG_DIR = get_log_dir()
     DEBUG_SESSION_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
     try:
@@ -89,19 +89,57 @@ else:
 # Original Code
 # ============================================================================
 
-sys.path.insert(0, os.path.expanduser('~/.task/scripts'))
-sys.path.insert(0, os.path.expanduser('~/dev/awesome-taskwarrior/lib'))
-from tw_condition_lib import compute_action, load_rc, sort_tasks
-from tw_hook_lib import task_export
+VERSION    = '0.1.0'
+NAG_RC     = Path.home() / '.task' / 'config' / 'smart-nag.rc'
+TASKRC     = Path.home() / '.taskrc'
+CACHE_FILE = Path.home() / '.task' / 'logs' / 'smart-nag.cache'
+CACHE_TTL  = 30  # seconds — skip recompute if nag was set this recently
 
-VERSION = '0.1.0'
-NAG_RC  = Path.home() / '.task' / 'config' / 'smart-nag.rc'
+
+def read_cache() -> 'str | None':
+    """Return cached nag text if still fresh, else None."""
+    try:
+        if (time.time() - CACHE_FILE.stat().st_mtime) < CACHE_TTL:
+            return CACHE_FILE.read_text()
+    except OSError:
+        pass
+    return None
+
+
+def write_cache(text: str):
+    try:
+        CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        CACHE_FILE.write_text(text)
+    except OSError:
+        pass
+
+
+def current_nag() -> str:
+    """Read the current nag= value from ~/.taskrc without spawning a subprocess."""
+    try:
+        for line in TASKRC.read_text().splitlines():
+            if line.startswith('nag='):
+                return line[4:]
+    except OSError:
+        pass
+    return ''
 
 
 def main():
     # on-launch protocol: read stdin and echo it back
     for line in sys.stdin:
         sys.stdout.write(line)
+
+    # Fast path: if nag was computed recently, skip all exports and lib imports
+    if read_cache() is not None:
+        sys.exit(0)
+
+    # Deferred imports — only needed on cache miss
+    import subprocess
+    sys.path.insert(0, os.path.expanduser('~/.task/scripts'))
+    sys.path.insert(0, os.path.expanduser('~/dev/awesome-taskwarrior/lib'))
+    from tw_condition_lib import compute_action, load_rc, sort_tasks
+    from tw_hook_lib import task_export
 
     _, conditions = load_rc(NAG_RC, app_prefix='nag')
 
@@ -121,11 +159,16 @@ def main():
             break
 
     nag_text = f'[nag] {message}' if message else message
-    subprocess.run(
-        ['task', 'rc.hooks=off', 'rc.confirmation=off', 'rc.verbose=nothing',
-         'config', 'nag', nag_text],
-        capture_output=True
-    )
+
+    # Only write to taskrc if the nag text has actually changed
+    if nag_text != current_nag():
+        subprocess.run(
+            ['task', 'rc.hooks=off', 'rc.confirmation=off', 'rc.verbose=nothing',
+             'config', 'nag', nag_text],
+            capture_output=True
+        )
+
+    write_cache(nag_text)
     sys.exit(0)
 
 
