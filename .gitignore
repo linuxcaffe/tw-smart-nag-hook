@@ -1,1 +1,7 @@
 *.orig
+
+# Added by make-awesome.py --gitignore
+logs/
+dev/
+claude/
+__pycache__/
