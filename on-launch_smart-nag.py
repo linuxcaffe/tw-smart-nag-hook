@@ -89,11 +89,11 @@ else:
 # Original Code
 # ============================================================================
 
-VERSION    = '0.1.0'
-NAG_RC     = Path.home() / '.task' / 'config' / 'smart-nag.rc'
-TASKRC     = Path.home() / '.taskrc'
-CACHE_FILE = Path.home() / '.task' / 'logs' / 'smart-nag.cache'
-CACHE_TTL  = 30  # seconds — skip recompute if nag was set this recently
+VERSION        = '0.1.1'
+NAG_RC         = Path.home() / '.task' / 'config' / 'smart-nag.rc'
+NAG_STATE_FILE = Path.home() / '.task' / 'config' / 'nag-state.rc'
+CACHE_FILE     = Path.home() / '.task' / 'logs' / 'smart-nag.cache'
+CACHE_TTL      = 30  # seconds — skip recompute if nag was set this recently
 
 
 def read_cache() -> 'str | None':
@@ -115,14 +115,22 @@ def write_cache(text: str):
 
 
 def current_nag() -> str:
-    """Read the current nag= value from ~/.taskrc without spawning a subprocess."""
+    """Read the current nag= value from nag-state.rc."""
     try:
-        for line in TASKRC.read_text().splitlines():
+        for line in NAG_STATE_FILE.read_text().splitlines():
             if line.startswith('nag='):
                 return line[4:]
     except OSError:
         pass
     return ''
+
+
+def write_nag(nag_text: str):
+    """Write nag= to the dedicated state file — never touches ~/.taskrc."""
+    try:
+        NAG_STATE_FILE.write_text(f'nag={nag_text}\n')
+    except OSError as e:
+        sys.stderr.write(f'smart-nag: could not write nag-state.rc: {e}\n')
 
 
 def main():
@@ -160,13 +168,10 @@ def main():
 
     nag_text = f'[nag] {message}' if message else message
 
-    # Only write to taskrc if the nag text has actually changed
+    # Only write if the nag text has actually changed — writes to nag-state.rc,
+    # never to ~/.taskrc (task config nag destroys the entire taskrc file).
     if nag_text != current_nag():
-        subprocess.run(
-            ['task', 'rc.hooks=off', 'rc.confirmation=off', 'rc.verbose=nothing',
-             'config', 'nag', nag_text],
-            capture_output=True
-        )
+        write_nag(nag_text)
 
     write_cache(nag_text)
     sys.exit(0)
