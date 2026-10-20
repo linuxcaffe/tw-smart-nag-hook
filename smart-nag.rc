@@ -7,7 +7,7 @@
 # ── Timer popup (smart-nag-popup.py + systemd timer) ─────────────────────────
 
 # Master switch for timer-driven popups (on|off)
-nag.popup         = on
+nag.popup         = off
 
 # Seconds before the notification auto-dismisses
 nag.popup-timeout = 8

@@ -13,18 +13,17 @@ if _os_timing.environ.get('TW_TIMING'):
 
 """
 on-launch_smart-nag.py - Smart configurable nag for Taskwarrior
-Version: 0.1.0
+Version: 1.2.1
 
 Replaces TW's native nag message with the first matching condition from
-smart-nag.rc. Writes rc.nag= to ~/.taskrc via `task config` before each
-TW invocation — native nag trigger still controls when it fires.
+smart-nag.rc. Writes nag= to ~/.task/config/nag-state.rc (included from
+the taskrc), never to ~/.taskrc — native nag trigger still controls when it fires.
+
+Skips the work under TW_NOINTERACT (or legacy TW_WEB): a client without a
+terminal never shows the nag, and the next CLI run recomputes it.
 
 Install:
-  cp on-launch_smart-nag.py ~/.task/hooks/on-launch_smart-nag.py
-  chmod +x ~/.task/hooks/on-launch_smart-nag.py
-
-  # Optional: include smart-nag.rc in ~/.taskrc for sanity-check integration:
-  #   include ~/.task/config/smart-nag.rc
+  tw -I smart-nag   (or: bash smart-nag.install)
 """
 
 # ============================================================================
@@ -89,7 +88,7 @@ else:
 # Original Code
 # ============================================================================
 
-VERSION        = '0.1.1'
+VERSION        = '1.2.1'
 NAG_RC         = Path.home() / '.task' / 'config' / 'smart-nag.rc'
 NAG_STATE_FILE = Path.home() / '.task' / 'config' / 'nag-state.rc'
 CACHE_FILE     = Path.home() / '.task' / 'logs' / 'smart-nag.cache'
@@ -138,12 +137,27 @@ def main():
     for line in sys.stdin:
         sys.stdout.write(line)
 
+    # No terminal, no nag to show: leave nag-state.rc for the next CLI run
+    if os.environ.get('TW_NOINTERACT') or os.environ.get('TW_WEB'):
+        sys.exit(0)
+
     # Fast path: if nag was computed recently, skip all exports and lib imports
     if read_cache() is not None:
         sys.exit(0)
 
-    # Deferred imports — only needed on cache miss
+    # Taskwarrior has already read nag-state.rc by the time on-launch runs, so a nag
+    # computed now shows on the next command either way: compute it in a detached
+    # child and let this command go. The cache stamp keeps a burst to one child.
     import subprocess
+    write_cache(current_nag())
+    subprocess.Popen([sys.executable, __file__, '--refresh'],
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True)
+    sys.exit(0)
+
+
+def refresh():
+    """Evaluate the conditions and write the first match to nag-state.rc."""
     sys.path.insert(0, os.path.expanduser('~/.task/scripts'))
     sys.path.insert(0, os.path.expanduser('~/dev/awesome-taskwarrior/lib'))
     from tw_condition_lib import compute_action, load_rc, sort_tasks
@@ -174,8 +188,10 @@ def main():
         write_nag(nag_text)
 
     write_cache(nag_text)
-    sys.exit(0)
 
 
 if __name__ == '__main__':
-    main()
+    if sys.argv[1:] == ['--refresh']:
+        refresh()
+    else:
+        main()

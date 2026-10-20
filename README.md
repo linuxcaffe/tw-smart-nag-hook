@@ -11,7 +11,8 @@ Replace Taskwarrior's static nag message with a live, context-aware reminder abo
 - Each condition defines a `filter`, a `msg` template, and a `sort` order
 - Token substitution in messages: `<description>`, `<due>`, `<due.age>`, `{count}`, and more
 - Six default conditions: active tasks, due today, scheduled today, overdue, behind schedule, highest urgency
-- Writes the result to `rc.nag` before Taskwarrior renders output — native nag trigger controls when it fires
+- Writes the result as `nag=` to `~/.task/config/nag-state.rc` (included from your taskrc) — native nag trigger controls when it fires
+- Optional desktop popup on a systemd timer, with Snooze
 - Add your own conditions without touching the hook script
 - Requires Taskwarrior 2.6.0+, Python 3.6+
 
@@ -21,7 +22,7 @@ Taskwarrior has a built-in nag message: a static string that appears when you co
 
 The result is a nudge that carries no information. You still have to run `task next` or `task active` to find out what you should actually be doing. The nag becomes noise and you learn to ignore it.
 
-tw-smart-nag-hook replaces that static string with a message generated from your live task data. Before every `task` invocation, it checks your configured conditions in order, finds the first one that matches, and writes a message like `task 7 "Write quarterly report" is 3d overdue!` into `rc.nag`. The nag trigger still controls when the message appears — this hook controls what it says.
+tw-smart-nag-hook replaces that static string with a message generated from your live task data. Before every `task` invocation, it checks your configured conditions in order, finds the first one that matches, and writes a message like `[nag] task 7 "Write quarterly report" is 3d overdue!` as `nag=` in `nag-state.rc`, which your taskrc includes. The nag trigger still controls when the message appears — this hook controls what it says.
 
 Because conditions are fully configurable, you can tune the priority order and message wording to match how you actually work.
 
@@ -43,7 +44,11 @@ Every time Taskwarrior shows you a nag, it now tells you exactly which task is d
 bash smart-nag.install
 ```
 
-Installs the hook to `~/.task/hooks/`, the config to `~/.task/config/smart-nag.rc`, and adds an include line to `~/.taskrc`.
+Installs the hook to `~/.task/hooks/`, the popup script to `~/.task/scripts/`, the timer units to `~/.config/systemd/user/` and the config to `~/.task/config/smart-nag.rc`, and includes `nag-state.rc` and `smart-nag.rc` (from `~/.task/config/included.rc` if you have one, else `~/.taskrc`).
+
+An existing `smart-nag.rc` is never overwritten, and removing smart-nag leaves it in place, so `tw -u smart-nag` keeps your settings. An enabled popup timer stays enabled across an update.
+
+Needs `tw_condition_lib.py` and `tw_hook_lib.py` in `~/.task/scripts/`; awesome-taskwarrior installs both.
 
 **Option 2 — Via [awesome-taskwarrior](https://github.com/linuxcaffe/awesome-taskwarrior)**
 
@@ -61,14 +66,15 @@ chmod +x ~/.task/hooks/on-launch_smart-nag.py
 # Copy the config
 cp smart-nag.rc ~/.task/config/smart-nag.rc
 
-# Add the include to ~/.taskrc
-echo "include ~/.task/config/smart-nag.rc" >> ~/.taskrc
+# The hook writes the nag here; Taskwarrior shows it only if it's included
+echo "nag=" > ~/.task/config/nag-state.rc
+echo "include ~/.task/config/nag-state.rc" >> ~/.taskrc
 
 # Verify the hook is active
 task diagnostics | grep smart-nag
 ```
 
-Note: the `include` line in `~/.taskrc` is optional. The hook reads `smart-nag.rc` directly. Add the include only if you also use [tw-sanity-check](https://github.com/linuxcaffe/tw-sanity-check) and want it to pick up the conditions via its include-chain traversal.
+Note: including `smart-nag.rc` itself is optional. The hook reads it directly. Add the include only if you also use [tw-sanity-check](https://github.com/linuxcaffe/tw-sanity-check) and want it to pick up the conditions via its include-chain traversal.
 
 ## Configuration
 
@@ -147,6 +153,8 @@ task done <id>          # nag appears when higher-urgency tasks exist
 task _get rc.nag
 ```
 
+The hook caches its result for 30 seconds (`~/.task/logs/smart-nag.cache`), so a burst of commands runs the condition filters once. Under `TW_NOINTERACT` (tw-web, other clients without a terminal) it does nothing: there's nowhere to show the nag.
+
 **Add a custom condition**
 
 Open `~/.task/config/smart-nag.rc` and add a new block. Conditions are evaluated top to bottom — the first match wins, so place higher-priority conditions earlier in the file.
@@ -169,7 +177,25 @@ Comment out the `filter` line or remove the block. The hook skips any condition 
 
 **Suppress the nag entirely**
 
-If no conditions match, the hook writes an empty string to `rc.nag`. Taskwarrior then shows no nag. The `nag-highest-urgency` fallback matches any pending task — remove or disable it if you want the nag to fire only for specific situations.
+If no conditions match, the hook writes an empty `nag=`. Taskwarrior then shows no nag. The `nag-highest-urgency` fallback matches any pending task — remove or disable it if you want the nag to fire only for specific situations.
+
+## Desktop popup
+
+`smart-nag-popup.py` evaluates the same conditions on a systemd user timer (2 minutes after login, then every 30 minutes; edit the `.timer` to change it) and shows the first match as a desktop notification. It's off until you turn it on:
+
+```ini
+# smart-nag.rc
+nag.popup         = on    # master switch
+nag.popup-timeout = 8     # seconds before it auto-dismisses
+nag.popup-snooze  = 30    # minutes Snooze suppresses it
+nag.popup-gtk     = on    # yad dialog with Open tasks / Snooze / Dismiss
+```
+
+```bash
+systemctl --user enable --now tw-smart-nag-popup.timer
+```
+
+The yad dialog needs `yad` and `gtk-task.sh` (tw-gtk); without them it falls back to `notify-send`, then a plain yad window.
 
 ## Project status
 
@@ -181,4 +207,4 @@ Stable and in daily use; configuration format and token syntax are settled for v
 - Language: Python 3
 - Requires: Taskwarrior 2.6.0, Python 3.6+
 - Platforms: Linux
-- Version: 1.0.0
+- Version: 1.2.1
