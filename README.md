@@ -153,7 +153,9 @@ task done <id>          # nag appears when higher-urgency tasks exist
 task _get rc.nag
 ```
 
-The hook caches its result for 30 seconds (`~/.task/logs/smart-nag.cache`), so a burst of commands runs the condition filters once. Under `TW_NOINTERACT` (tw-web, other clients without a terminal) it does nothing: there's nowhere to show the nag.
+The hook caches its result for 30 seconds (`~/.task/logs/smart-nag.cache`), so a burst of commands runs the condition filters once. Taskwarrior has read `nag-state.rc` before on-launch hooks run, so the hook evaluates the conditions in a detached child and the command doesn't wait; the result shows from the next command on.
+
+In clients without a terminal the nag arrives on stderr like any warning: tw-web shows it in its output line after a write (reads run with hooks off, so they neither refresh nor show it).
 
 **Add a custom condition**
 
@@ -207,4 +209,4 @@ Stable and in daily use; configuration format and token syntax are settled for v
 - Language: Python 3
 - Requires: Taskwarrior 2.6.0, Python 3.6+
 - Platforms: Linux
-- Version: 1.2.1
+- Version: 1.2.2
