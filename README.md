@@ -12,6 +12,7 @@ Replace Taskwarrior's static nag message with a live, context-aware reminder abo
 - Token substitution in messages: `<description>`, `<due>`, `<due.age>`, `{count}`, and more
 - Six default conditions: active tasks, due today, scheduled today, overdue, behind schedule, highest urgency
 - Writes the result as `nag=` to `~/.task/config/nag-state.rc` (included from your taskrc) — native nag trigger controls when it fires
+- `nag` command: the nag on demand, `nag -l` shows which condition won and why, `nag -e` edits them
 - Optional desktop popup on a systemd timer, with Snooze
 - Add your own conditions without touching the hook script
 - Requires Taskwarrior 2.6.0+, Python 3.6+
@@ -44,7 +45,7 @@ Every time Taskwarrior shows you a nag, it now tells you exactly which task is d
 bash smart-nag.install
 ```
 
-Installs the hook to `~/.task/hooks/`, the popup script to `~/.task/scripts/`, the timer units to `~/.config/systemd/user/` and the config to `~/.task/config/smart-nag.rc`, and includes `nag-state.rc` and `smart-nag.rc` (from `~/.task/config/included.rc` if you have one, else `~/.taskrc`).
+Installs the hook to `~/.task/hooks/`, the `nag` command to `~/.task/scripts/` (and registers it with `tw`, so `tw nag` works too), the timer units to `~/.config/systemd/user/` and the config to `~/.task/config/smart-nag.rc`, and includes `nag-state.rc` and `smart-nag.rc` (from `~/.task/config/included.rc` if you have one, else `~/.taskrc`).
 
 An existing `smart-nag.rc` is never overwritten, and removing smart-nag leaves it in place, so `tw -u smart-nag` keeps your settings. An enabled popup timer stays enabled across an update.
 
@@ -153,7 +154,7 @@ task done <id>          # nag appears when higher-urgency tasks exist
 task _get rc.nag
 ```
 
-The hook caches its result for 30 seconds (`~/.task/logs/smart-nag.cache`), so a burst of commands runs the condition filters once. Taskwarrior has read `nag-state.rc` before on-launch hooks run, so the hook evaluates the conditions in a detached child and the command doesn't wait; the result shows from the next command on.
+The hook caches its result for 30 seconds (`~/.task/logs/smart-nag.cache`), so a burst of commands runs the condition filters once. Taskwarrior has read `nag-state.rc` before on-launch hooks run, so the hook runs `nag --refresh` detached and the command doesn't wait; the result shows from the next command on.
 
 In clients without a terminal the nag arrives on stderr like any warning: tw-web shows it in its output line after a write (reads run with hooks off, so they neither refresh nor show it).
 
@@ -181,9 +182,32 @@ Comment out the `filter` line or remove the block. The hook skips any condition 
 
 If no conditions match, the hook writes an empty `nag=`. Taskwarrior then shows no nag. The `nag-highest-urgency` fallback matches any pending task — remove or disable it if you want the nag to fire only for specific situations.
 
+## The nag command
+
+```text
+nag            recompute the nag now, write it to nag-state.rc, print it
+nag -l         list the conditions in order: matching tasks, and which one wins
+nag -e         edit smart-nag.rc ($VISUAL, $EDITOR, else vi)
+nag --popup    show the nag as a desktop popup (run by tw-smart-nag-popup.timer)
+nag --refresh  recompute quietly (run by the on-launch hook, detached)
+```
+
+Taskwarrior prints the nag only when you `start` or `done` a task that isn't the most urgent; `nag` shows it whenever you ask. `nag -l` is the tool for tuning `smart-nag.rc`:
+
+```text
+  nag-started            0 tasks  +PENDING +ACTIVE
+  nag-due-today          0 tasks  +PENDING due:today
+  nag-sched-today        0 tasks  +PENDING scheduled:today
+> nag-due-late           1 task   +PENDING due.before:today
+  nag-sched-late         3 tasks  +PENDING scheduled.before:today
+  nag-highest-urgency   12 tasks  +PENDING ( due.none: and scheduled.none: )
+
+[nag] task 119 "Renew cert fail" is 1d overdue!
+```
+
 ## Desktop popup
 
-`smart-nag-popup.py` evaluates the same conditions on a systemd user timer (2 minutes after login, then every 30 minutes; edit the `.timer` to change it) and shows the first match as a desktop notification. It's off until you turn it on:
+`nag --popup` evaluates the same conditions on a systemd user timer (2 minutes after login, then every 30 minutes; edit the `.timer` to change it) and shows the first match as a desktop notification. It's off until you turn it on:
 
 ```ini
 # smart-nag.rc
@@ -209,4 +233,4 @@ Stable and in daily use; configuration format and token syntax are settled for v
 - Language: Python 3
 - Requires: Taskwarrior 2.6.0, Python 3.6+
 - Platforms: Linux
-- Version: 1.2.2
+- Version: 1.3.0

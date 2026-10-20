@@ -13,14 +13,14 @@ if _os_timing.environ.get('TW_TIMING'):
 
 """
 on-launch_smart-nag.py - Smart configurable nag for Taskwarrior
-Version: 1.2.2
+Version: 1.3.0
 
 Replaces TW's native nag message with the first matching condition from
 smart-nag.rc. Writes nag= to ~/.task/config/nag-state.rc (included from
 the taskrc), never to ~/.taskrc — native nag trigger still controls when it fires.
 
-The conditions are evaluated in a detached child, so no command waits for
-them; clients without a terminal (tw-web) refresh the nag too, and show it
+The conditions are evaluated by `nag --refresh` (~/.task/scripts/nag) in a
+detached process, so no command waits for them; clients without a terminal (tw-web) refresh the nag too, and show it
 from the stderr Taskwarrior writes it to.
 
 Install:
@@ -89,11 +89,11 @@ else:
 # Original Code
 # ============================================================================
 
-VERSION        = '1.2.2'
-NAG_RC         = Path.home() / '.task' / 'config' / 'smart-nag.rc'
+VERSION        = '1.3.0'
 NAG_STATE_FILE = Path.home() / '.task' / 'config' / 'nag-state.rc'
 CACHE_FILE     = Path.home() / '.task' / 'logs' / 'smart-nag.cache'
 CACHE_TTL      = 30  # seconds — skip recompute if nag was set this recently
+NAG_CMD        = Path.home() / '.task' / 'scripts' / 'nag'
 
 
 def read_cache() -> 'str | None':
@@ -125,14 +125,6 @@ def current_nag() -> str:
     return ''
 
 
-def write_nag(nag_text: str):
-    """Write nag= to the dedicated state file — never touches ~/.taskrc."""
-    try:
-        NAG_STATE_FILE.write_text(f'nag={nag_text}\n')
-    except OSError as e:
-        sys.stderr.write(f'smart-nag: could not write nag-state.rc: {e}\n')
-
-
 def main():
     # on-launch protocol: read stdin and echo it back
     for line in sys.stdin:
@@ -143,52 +135,16 @@ def main():
         sys.exit(0)
 
     # Taskwarrior has already read nag-state.rc by the time on-launch runs, so a nag
-    # computed now shows on the next command either way: compute it in a detached
-    # child and let this command go. The cache stamp keeps a burst to one child.
-    import subprocess
-    write_cache(current_nag())
-    subprocess.Popen([sys.executable, __file__, '--refresh'],
-                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                     stderr=subprocess.DEVNULL, start_new_session=True)
+    # computed now shows on the next command either way: `nag --refresh` computes it
+    # detached and this command goes on. The cache stamp keeps a burst to one refresh.
+    if NAG_CMD.exists():
+        import subprocess
+        write_cache(current_nag())
+        subprocess.Popen([str(NAG_CMD), '--refresh'],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
     sys.exit(0)
 
 
-def refresh():
-    """Evaluate the conditions and write the first match to nag-state.rc."""
-    sys.path.insert(0, os.path.expanduser('~/.task/scripts'))
-    sys.path.insert(0, os.path.expanduser('~/dev/awesome-taskwarrior/lib'))
-    from tw_condition_lib import compute_action, load_rc, sort_tasks
-    from tw_hook_lib import task_export
-
-    _, conditions = load_rc(NAG_RC, app_prefix='nag')
-
-    message = ''
-    for cond in conditions:
-        if cond.get('type', 'nag') != 'nag':
-            continue
-        filt = cond.get('filter', '').strip()
-        if not filt:
-            continue
-        tasks = task_export(filt.split())
-        if not tasks:
-            continue
-        tasks = sort_tasks(tasks, cond.get('sort', ''))
-        message = compute_action(cond.get('msg', ''), tasks[0], count=len(tasks))
-        if message:
-            break
-
-    nag_text = f'[nag] {message}' if message else message
-
-    # Only write if the nag text has actually changed — writes to nag-state.rc,
-    # never to ~/.taskrc (task config nag destroys the entire taskrc file).
-    if nag_text != current_nag():
-        write_nag(nag_text)
-
-    write_cache(nag_text)
-
-
 if __name__ == '__main__':
-    if sys.argv[1:] == ['--refresh']:
-        refresh()
-    else:
-        main()
+    main()

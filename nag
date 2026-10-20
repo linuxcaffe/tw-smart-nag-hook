@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+"""
+nag - smart-nag's command: the nag on demand, why it was chosen, and the popup
+
+  nag            recompute the nag now, write it to nag-state.rc, print it
+  nag -l         list the conditions in order: matching tasks, and which one wins
+  nag -e         edit smart-nag.rc ($VISUAL, $EDITOR, else vi)
+  nag --popup    show the nag as a desktop popup (run by tw-smart-nag-popup.timer)
+  nag --refresh  recompute quietly (run by the on-launch hook, detached)
+
+Version: 1.3.0
+"""
+
+import os
+import shlex
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+VERSION     = '1.3.0'
+TASK_DIR    = Path(os.environ.get('TW_TASK_DIR', str(Path.home() / '.task')))
+NAG_RC      = TASK_DIR / 'config' / 'smart-nag.rc'
+NAG_STATE   = TASK_DIR / 'config' / 'nag-state.rc'
+CACHE_FILE  = TASK_DIR / 'logs' / 'smart-nag.cache'
+SNOOZE_FILE = TASK_DIR / 'config' / '.smart-nag-snooze'
+GTK_TASK    = TASK_DIR / 'scripts' / 'gtk-task.sh'
+
+sys.path.insert(0, str(TASK_DIR / 'scripts'))
+sys.path.insert(0, str(Path.home() / 'dev' / 'awesome-taskwarrior' / 'lib'))
+
+
+# ── Conditions ────────────────────────────────────────────────────────────────
+
+def load():
+    """(settings, nag conditions) from smart-nag.rc."""
+    from tw_condition_lib import load_rc
+    cfg, conditions = load_rc(NAG_RC, app_prefix='nag')
+    return cfg, [c for c in conditions
+                 if c.get('type', 'nag') == 'nag' and c.get('filter', '').strip()]
+
+
+def evaluate(cond):
+    """(matching tasks sorted by the condition's sort, message for the first)."""
+    from tw_condition_lib import compute_action, sort_tasks
+    from tw_hook_lib import task_export
+    tasks = task_export(cond['filter'].split())
+    if not tasks:
+        return [], ''
+    tasks = sort_tasks(tasks, cond.get('sort', ''))
+    return tasks, compute_action(cond.get('msg', ''), tasks[0], count=len(tasks))
+
+
+def first_nag(conditions):
+    """The message of the first condition that matches, or ''."""
+    for cond in conditions:
+        _, message = evaluate(cond)
+        if message:
+            return message
+    return ''
+
+
+# ── State ─────────────────────────────────────────────────────────────────────
+
+def current_nag():
+    try:
+        for line in NAG_STATE.read_text().splitlines():
+            if line.startswith('nag='):
+                return line[4:]
+    except OSError:
+        pass
+    return ''
+
+
+def save(message):
+    """Write nag= to nag-state.rc (only when it changed) and stamp the hook's cache."""
+    nag_text = f'[nag] {message}' if message else ''
+    if nag_text != current_nag():
+        try:
+            NAG_STATE.write_text(f'nag={nag_text}\n')
+        except OSError as e:
+            sys.stderr.write(f'nag: could not write {NAG_STATE}: {e}\n')
+    try:
+        CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        CACHE_FILE.write_text(nag_text)
+    except OSError:
+        pass
+    return nag_text
+
+
+# ── Commands ──────────────────────────────────────────────────────────────────
+
+def cmd_show():
+    _, conditions = load()
+    nag_text = save(first_nag(conditions))
+    print(nag_text or 'No nag: no condition matches.')
+
+
+def cmd_refresh():
+    _, conditions = load()
+    save(first_nag(conditions))
+
+
+def cmd_list():
+    _, conditions = load()
+    if not conditions:
+        print(f'No nag conditions in {NAG_RC}')
+        return
+    width = max(len(c['name']) for c in conditions)
+    winner = None
+    for cond in conditions:
+        tasks, message = evaluate(cond)
+        mark = ' '
+        if message and winner is None:
+            winner, mark = message, '>'
+        noun = 'task' if len(tasks) == 1 else 'tasks'
+        print(f"{mark} {cond['name']:<{width}}  {len(tasks):>4} {noun:<5}  {cond['filter']}")
+    print()
+    print(f'[nag] {winner}' if winner else 'No nag: no condition matches.')
+    save(winner or '')
+
+
+def cmd_edit():
+    editor = os.environ.get('VISUAL') or os.environ.get('EDITOR') or 'vi'
+    sys.exit(subprocess.call(shlex.split(editor) + [str(NAG_RC)]))
+
+
+# ── Popup ─────────────────────────────────────────────────────────────────────
+
+def _has(cmd):
+    return subprocess.run(['which', cmd], capture_output=True).returncode == 0
+
+
+def is_snoozed():
+    try:
+        return time.time() < float(SNOOZE_FILE.read_text().strip())
+    except (ValueError, OSError):
+        return False
+
+
+def show_yad(message, timeout_secs, with_buttons):
+    """YAD popup. with_buttons=True adds Open/Snooze/Dismiss.
+    Returns 'open', 'snooze', or 'dismiss'."""
+    cmd = [
+        'yad', '--title=Taskwarrior', f'--text={message}',
+        f'--timeout={timeout_secs}', '--timeout-indicator=top',
+        '--no-markup', '--wrap', '--width=420', '--borders=14', '--skip-taskbar',
+    ]
+    if with_buttons:
+        cmd += ['--button=Open tasks:10', '--button=Snooze:20', '--button=Dismiss:30']
+    else:
+        cmd.append('--no-buttons')
+    result = subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL)
+    return {10: 'open', 20: 'snooze'}.get(result.returncode, 'dismiss')
+
+
+def cmd_popup():
+    if not NAG_RC.exists():
+        return
+    cfg, conditions = load()
+    if cfg.get('popup', 'on').strip().lower() != 'on' or is_snoozed():
+        return
+    timeout  = int(cfg.get('popup-timeout', '8').strip())
+    snooze_m = int(cfg.get('popup-snooze', '30').strip())
+    use_gtk  = cfg.get('popup-gtk', 'on').strip().lower() == 'on'
+
+    message = first_nag(conditions)
+    save(message)
+    if not message:
+        return
+
+    # Richest available backend
+    if use_gtk and _has('yad') and GTK_TASK.exists():
+        action = show_yad(message, timeout, with_buttons=True)
+        if action == 'open':
+            subprocess.Popen([str(GTK_TASK)], stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+        elif action == 'snooze':
+            try:
+                SNOOZE_FILE.write_text(str(time.time() + snooze_m * 60))
+            except OSError:
+                pass
+    elif _has('notify-send'):
+        subprocess.run(['notify-send', '--app-name=Taskwarrior', '-t', str(timeout * 1000),
+                        'Taskwarrior', message], check=False, stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    elif _has('yad'):
+        show_yad(message, timeout, with_buttons=False)
+
+
+COMMANDS = {
+    (): cmd_show,
+    ('-l',): cmd_list, ('--list',): cmd_list,
+    ('-e',): cmd_edit, ('--edit',): cmd_edit,
+    ('--popup',): cmd_popup,
+    ('--refresh',): cmd_refresh,
+}
+
+
+def main(argv):
+    if argv in (['-h'], ['--help']):
+        print(__doc__.strip().split('\n\n')[1])
+        return 0
+    if argv in (['-v'], ['--version']):
+        print(f'nag {VERSION}')
+        return 0
+    command = COMMANDS.get(tuple(argv))
+    if command is None:
+        sys.stderr.write(f"nag: unknown arguments: {' '.join(argv)} (try nag -h)\n")
+        return 2
+    command()
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

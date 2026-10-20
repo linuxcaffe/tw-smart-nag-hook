@@ -4,7 +4,7 @@
 #   include ~/.task/config/smart-nag.rc
 #      ONLY if inclusion to sanity-check is desired
 
-# ── Timer popup (smart-nag-popup.py + systemd timer) ─────────────────────────
+# ── Timer popup (nag --popup + systemd timer) ─────────────────────────────────
 
 # Master switch for timer-driven popups (on|off)
 nag.popup         = off
