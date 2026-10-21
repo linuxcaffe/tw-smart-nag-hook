@@ -85,37 +85,37 @@ Note: including `smart-nag.rc` itself is optional. The hook reads it directly. A
 # smart-nag.rc
 
 # Active tasks — checked first
-condition.nag-started.filter      = +PENDING +ACTIVE
+condition.nag-started.filter      = +PENDING +ACTIVE -nonag
 condition.nag-started.msg         = task <id> "<description>" is active! Still working on it?
 condition.nag-started.sort        = urgency-
 condition.nag-started.type        = nag
 
 # Due today
-condition.nag-due-today.filter    = +PENDING due:today
+condition.nag-due-today.filter    = +PENDING due:today -nonag
 condition.nag-due-today.msg       = task <id> "<description>" is due TODAY!
 condition.nag-due-today.sort      = due+,urgency-
 condition.nag-due-today.type      = nag
 
 # Scheduled today
-condition.nag-sched-today.filter  = +PENDING scheduled:today
+condition.nag-sched-today.filter  = +PENDING scheduled:today -nonag
 condition.nag-sched-today.msg     = task <id> "<description>" is scheduled for TODAY!
 condition.nag-sched-today.sort    = scheduled+,urgency-
 condition.nag-sched-today.type    = nag
 
 # Overdue — uses <due.age> token
-condition.nag-due-late.filter     = +PENDING due.before:today
+condition.nag-due-late.filter     = +PENDING due.before:today -nonag
 condition.nag-due-late.msg        = task <id> "<description>" is <due.age> overdue!
 condition.nag-due-late.sort       = due+,urgency-
 condition.nag-due-late.type       = nag
 
 # Behind schedule
-condition.nag-sched-late.filter   = +PENDING scheduled.before:today
+condition.nag-sched-late.filter   = +PENDING scheduled.before:today -nonag
 condition.nag-sched-late.msg      = task <id> "<description>" is <scheduled.age> behind schedule!
 condition.nag-sched-late.sort     = scheduled+,urgency-
 condition.nag-sched-late.type     = nag
 
 # Highest urgency fallback — fires when nothing above matched
-condition.nag-highest-urgency.filter = +PENDING ( due.none: and scheduled.none: )
+condition.nag-highest-urgency.filter = +PENDING ( due.none: and scheduled.none: ) -nonag
 condition.nag-highest-urgency.msg    = task <id> "<description>" is the highest urgency!
 condition.nag-highest-urgency.sort   = urgency-
 condition.nag-highest-urgency.type   = nag
@@ -164,7 +164,7 @@ Open `~/.task/config/smart-nag.rc` and add a new block. Conditions are evaluated
 
 ```ini
 # Example: nag about tasks tagged +urgent with no due date
-condition.nag-urgent-noduedate.filter = +PENDING +urgent due.none:
+condition.nag-urgent-noduedate.filter = +PENDING +urgent due.none: -nonag
 condition.nag-urgent-noduedate.msg    = task <id> "<description>" is urgent but has no due date!
 condition.nag-urgent-noduedate.sort   = urgency-
 condition.nag-urgent-noduedate.type   = nag
@@ -177,6 +177,21 @@ Comment out the `filter` line or remove the block. The hook skips any condition 
 ```ini
 # condition.nag-started.filter  = +PENDING +ACTIVE   # disabled
 ```
+
+**Keep a task out of the nag**
+
+Tag it `+nonag`:
+
+```bash
+task 42 modify +nonag     # no more nagging about task 42
+task 42 modify -nonag     # nag about it again
+```
+
+The tag means nothing to the hook by itself: a condition skips `+nonag` tasks because its filter says
+`-nonag`. Every shipped condition does, so a tagged task never wins the nag. Take `-nonag` off a
+condition that should nag regardless, and put it on any condition you add.
+A tagged task still counts everywhere else in Taskwarrior; only the nag ignores it, and `nag -l` shows the
+counts without it.
 
 **Suppress the nag entirely**
 

@@ -20,44 +20,46 @@ nag.popup-snooze  = 30
 nag.popup-gtk     = on
 
 # ── Conditions ────────────────────────────────────────────────────────────────
+# Every filter ends in -nonag, so tasks tagged +nonag (task <id> mod +nonag) never nag.
+# Remove it from a condition that should nag regardless; add it to new ones.
 
 condition.nag-started.description = Started tasks 
-condition.nag-started.filter      = +PENDING +ACTIVE
+condition.nag-started.filter      = +PENDING +ACTIVE -nonag
 condition.nag-started.msg         = task <id> "<description>" is active! Still working on it?
 condition.nag-started.sort        = urgency-
 condition.nag-started.action      = edit|mod, Stop <description>|stop
 condition.nag-started.type        = nag
 
 condition.nag-due-today.description = Due today! 
-condition.nag-due-today.filter      = +PENDING due:today
+condition.nag-due-today.filter      = +PENDING due:today -nonag
 condition.nag-due-today.msg         = task <id> "<description>" is due TODAY!
 condition.nag-due-today.sort        = due+,urgency-
 condition.nag-due-today.action      = edit|mod due:, clear due:date|mod due:
 condition.nag-due-today.type        = nag
 
 condition.nag-sched-today.description = Scheduled for today! 
-condition.nag-sched-today.filter      = +PENDING scheduled:today
+condition.nag-sched-today.filter      = +PENDING scheduled:today -nonag
 condition.nag-sched-today.msg         = task <id> "<description>" is scheduled for TODAY!
 condition.nag-sched-today.sort        = scheduled+,urgency-
 condition.nag-sched-today.action      = edit|mod sched:, clear sched:date|mod scheduled:
 condition.nag-sched-today.type        = nag
 
 condition.nag-due-late.description = Overdue tasks! 
-condition.nag-due-late.filter      = +PENDING due.before:today
+condition.nag-due-late.filter      = +PENDING due.before:today -nonag
 condition.nag-due-late.msg         = task <id> "<description>" is <due.age> overdue!
 condition.nag-due-late.sort        = due+,urgency-
 condition.nag-due-late.action      = edit|mod due:, clear due:date|mod due:
 condition.nag-due-late.type        = nag
 
 condition.nag-sched-late.description = Behind schedule! 
-condition.nag-sched-late.filter      = +PENDING scheduled.before:today
+condition.nag-sched-late.filter      = +PENDING scheduled.before:today -nonag
 condition.nag-sched-late.msg         = task <id> "<description>" is <scheduled.age> behind schedule!
 condition.nag-sched-late.sort        = scheduled+,urgency-
 condition.nag-sched-late.action      = edit|mod sched:, clear sched:date|mod scheduled:
 condition.nag-sched-late.type        = nag
 
 condition.nag-highest-urgency.description = Highest urgency! 
-condition.nag-highest-urgency.filter      = +PENDING ( due.none: and scheduled.none: )
+condition.nag-highest-urgency.filter      = +PENDING ( due.none: and scheduled.none: ) -nonag
 condition.nag-highest-urgency.msg         = task <id> "<description>" is the highest urgency!
 condition.nag-highest-urgency.sort        = urgency-
 condition.nag-highest-urgency.action      = edit|mod:, start "<description>"|start, clear sched:date|mod scheduled:
