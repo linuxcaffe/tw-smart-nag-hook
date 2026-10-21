@@ -13,7 +13,7 @@ if _os_timing.environ.get('TW_TIMING'):
 
 """
 on-launch_smart-nag.py - Smart configurable nag for Taskwarrior
-Version: 1.3.0
+Version: 1.3.2
 
 Replaces TW's native nag message with the first matching condition from
 smart-nag.rc. Writes nag= to ~/.task/config/nag-state.rc (included from
@@ -89,7 +89,7 @@ else:
 # Original Code
 # ============================================================================
 
-VERSION        = '1.3.0'
+VERSION        = '1.3.2'
 NAG_STATE_FILE = Path.home() / '.task' / 'config' / 'nag-state.rc'
 CACHE_FILE     = Path.home() / '.task' / 'logs' / 'smart-nag.cache'
 CACHE_TTL      = 30  # seconds — skip recompute if nag was set this recently
